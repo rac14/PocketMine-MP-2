@@ -1776,7 +1776,7 @@ class World implements ChunkManager{
 	 * @param Player|null  $player default null
 	 * @param bool         $playSound Whether to play a block-place sound if the block was placed successfully.
 	 */
-	public function useItemOn(Vector3 $vector, Item &$item, int $face, ?Vector3 $clickVector = null, ?Player $player = null, bool $playSound = false) : ItemUseResult{
+	public function useItemOn(Vector3 $vector, Item &$item, int $face, ?Vector3 $clickVector = null, ?Player $player = null, bool $playSound = false) : bool{
 		$blockClicked = $this->getBlock($vector);
 		$blockReplace = $blockClicked->getSide($face);
 
@@ -1786,16 +1786,16 @@ class World implements ChunkManager{
 
 		if(!$this->isInWorld($blockReplace->getPosition()->x, $blockReplace->getPosition()->y, $blockReplace->getPosition()->z)){
 			//TODO: build height limit messages for custom world heights and mcregion cap
-			return ItemUseResult::FAIL();
+			return false;
 		}
 		$chunkX = $blockReplace->getPosition()->getFloorX() >> Chunk::COORD_BIT_SIZE;
 		$chunkZ = $blockReplace->getPosition()->getFloorZ() >> Chunk::COORD_BIT_SIZE;
 		if(!$this->isChunkLoaded($chunkX, $chunkZ) || $this->isChunkLocked($chunkX, $chunkZ)){
-			return ItemUseResult::FAIL();
+			return false;
 		}
 
 		if($blockClicked->getId() === BlockLegacyIds::AIR){
-			return ItemUseResult::FAIL();
+			return false;
 		}
 
 		if($player !== null){
@@ -1807,22 +1807,22 @@ class World implements ChunkManager{
 			$ev->call();
 			if(!$ev->isCancelled()){
 				if((!$player->isSneaking() or $item->isNull()) and $blockClicked->onInteract($item, $face, $clickVector, $player)){
-					return ItemUseResult::SUCCESS();
+					return true;
 				}
 
 				$result = $item->onInteractBlock($player, $blockReplace, $blockClicked, $face, $clickVector);
 				if(!$result->equals(ItemUseResult::NONE())){
-					return $result;
+					return $result->equals(ItemUseResult::SUCCESS());
 				}
 			}else{
-				return ItemUseResult::FAIL();
+				return false;
 			}
 		}elseif($blockClicked->onInteract($item, $face, $clickVector, $player)){
-			return ItemUseResult::SUCCESS();
+			return true;
 		}
 
 		if($item->isNull() or !$item->canBePlaced()){
-			return ItemUseResult::FAIL();
+			return false;
 		}
 		$hand = $item->getBlock($face);
 		$hand->position($this, $blockReplace->getPosition()->x, $blockReplace->getPosition()->y, $blockReplace->getPosition()->z);
@@ -1831,19 +1831,19 @@ class World implements ChunkManager{
 			$blockReplace = $blockClicked;
 			$hand->position($this, $blockReplace->getPosition()->x, $blockReplace->getPosition()->y, $blockReplace->getPosition()->z);
 		}elseif(!$hand->canBePlacedAt($blockReplace, $clickVector, $face, false)){
-			return ItemUseResult::FAIL();
+			return false;
 		}
 
 		$tx = new BlockTransaction($this);
 		if(!$hand->place($tx, $item, $blockReplace, $blockClicked, $face, $clickVector, $player)){
-			return ItemUseResult::FAIL();
+			return false;
 		}
 
 		foreach($tx->getBlocks() as [$x, $y, $z, $block]){
 			$block->position($this, $x, $y, $z);
 			foreach($block->getCollisionBoxes() as $collisionBox){
 				if(count($this->getCollidingEntities($collisionBox)) > 0){
-					return ItemUseResult::NONE();  //Entity in block
+					return false;  //Entity in block
 				}
 			}
 		}
@@ -1872,12 +1872,12 @@ class World implements ChunkManager{
 
 			$ev->call();
 			if($ev->isCancelled()){
-				return ItemUseResult::FAIL();
+				return false;
 			}
 		}
 
 		if(!$tx->apply()){
-			return ItemUseResult::FAIL();
+			return false;
 		}
 		foreach($tx->getBlocks() as [$x, $y, $z, $_]){
 			$tile = $this->getTileAt($x, $y, $z);
@@ -1895,7 +1895,7 @@ class World implements ChunkManager{
 
 		$item->pop();
 
-		return ItemUseResult::SUCCESS();
+		return true;
 	}
 
 	public function getEntity(int $entityId) : ?Entity{

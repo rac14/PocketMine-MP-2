@@ -1613,9 +1613,7 @@ class Player extends Human implements CommandSender, ChunkListener, IPlayer{
 			$this->broadcastAnimation(new ArmSwingAnimation($this), $this->getViewers());
 			$item = $this->inventory->getItemInHand(); //this is a copy of the real item
 			$oldItem = clone $item;
-
-			$useItemOn = $this->getWorld()->useItemOn($pos, $item, $face, $clickOffset, $this, true);
-			if($useItemOn === ItemUseResult::SUCCESS()){
+			if($this->getWorld()->useItemOn($pos, $item, $face, $clickOffset, $this, true)){
 				if($this->hasFiniteResources() and !$item->equalsExact($oldItem) and $oldItem->equalsExact($this->inventory->getItemInHand())){
 					if($item instanceof Durable && $item->isBroken()){
 						$this->broadcastSound(new ItemBreakSound());
@@ -1624,8 +1622,6 @@ class Player extends Human implements CommandSender, ChunkListener, IPlayer{
 				}
 				return true;
 			}
-
-			return $useItemOn === ItemUseResult::NONE();
 		}else{
 			$this->logger->debug("Cancelled interaction of block at $pos due to not currently being interactable");
 		}
