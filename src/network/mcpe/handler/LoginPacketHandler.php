@@ -45,6 +45,7 @@ use pocketmine\player\PlayerInfo;
 use pocketmine\player\XboxLivePlayerInfo;
 use pocketmine\Server;
 use Ramsey\Uuid\Uuid;
+use function in_array;
 use function is_array;
 
 /**
@@ -79,6 +80,8 @@ class LoginPacketHandler extends PacketHandler{
 	}
 
 	public function handleLogin(LoginPacket $packet) : bool{
+		$this->session->setProtocolId($packet->protocol);
+
 		if(!$this->isCompatibleProtocol($packet->protocol)){
 			$this->session->sendDataPacket(PlayStatusPacket::create($packet->protocol < ProtocolInfo::CURRENT_PROTOCOL ? PlayStatusPacket::LOGIN_FAILED_CLIENT : PlayStatusPacket::LOGIN_FAILED_SERVER), true);
 
@@ -135,8 +138,7 @@ class LoginPacketHandler extends PacketHandler{
 
 		$ev = new PlayerPreLoginEvent(
 			$playerInfo,
-			$this->session->getIp(),
-			$this->session->getPort(),
+			$this->session,
 			$this->server->requiresAuthentication()
 		);
 		if($this->server->getNetwork()->getConnectionCount() > $this->server->getMaxPlayers()){
@@ -145,7 +147,7 @@ class LoginPacketHandler extends PacketHandler{
 		if(!$this->server->isWhitelisted($playerInfo->getUsername())){
 			$ev->setKickReason(PlayerPreLoginEvent::KICK_REASON_SERVER_WHITELISTED, "Server is whitelisted");
 		}
-		if($this->server->getNameBans()->isBanned($playerInfo->getUsername()) or $this->server->getIPBans()->isBanned($this->session->getIp())){
+		if($this->server->getNameBans()->isBanned($playerInfo->getUsername()) || $this->server->getIPBans()->isBanned($this->session->getIp())){
 			$ev->setKickReason(PlayerPreLoginEvent::KICK_REASON_BANNED, "You are banned");
 		}
 
@@ -233,6 +235,6 @@ class LoginPacketHandler extends PacketHandler{
 	}
 
 	protected function isCompatibleProtocol(int $protocolVersion) : bool{
-		return $protocolVersion === ProtocolInfo::CURRENT_PROTOCOL;
+		return in_array($protocolVersion, ProtocolInfo::ACCEPTED_PROTOCOL, true);
 	}
 }
