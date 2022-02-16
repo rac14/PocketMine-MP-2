@@ -1869,7 +1869,7 @@ class World implements ChunkManager{
 	 * @param Player|null  $player default null
 	 * @param bool         $playSound Whether to play a block-place sound if the block was placed successfully.
 	 */
-	public function useItemOn(Vector3 $vector, Item &$item, int $face, ?Vector3 $clickVector = null, ?Player $player = null, bool $playSound = false) : bool{
+	public function useItemOn(Vector3 $vector, Item &$item, int $face, ?Vector3 $clickVector = null, ?Player $player = null, bool $playSound = false) : ItemUseResult{
 		$blockClicked = $this->getBlock($vector);
 		$blockReplace = $blockClicked->getSide($face);
 
@@ -1879,17 +1879,19 @@ class World implements ChunkManager{
 
 		if(!$this->isInWorld($blockReplace->getPosition()->x, $blockReplace->getPosition()->y, $blockReplace->getPosition()->z)){
 			//TODO: build height limit messages for custom world heights and mcregion cap
-			return false;
+			return ItemUseResult::FAIL();
 		}
 		$chunkX = $blockReplace->getPosition()->getFloorX() >> Chunk::COORD_BIT_SIZE;
 		$chunkZ = $blockReplace->getPosition()->getFloorZ() >> Chunk::COORD_BIT_SIZE;
 		if(!$this->isChunkLoaded($chunkX, $chunkZ) || $this->isChunkLocked($chunkX, $chunkZ)){
-			return false;
+			return ItemUseResult::FAIL();
 		}
 
-		//if($blockClicked->getId() === BlockLegacyIds::AIR){
-		//	return false;
-		//}
+
+		if($blockClicked->getId() === BlockLegacyIds::AIR){
+			return ItemUseResult::FAIL();
+		}
+
 
 		if($player !== null){
 			$ev = new PlayerInteractEvent($player, $item, $blockClicked, $clickVector, $face, PlayerInteractEvent::RIGHT_CLICK_BLOCK);
@@ -1899,23 +1901,27 @@ class World implements ChunkManager{
 
 			$ev->call();
 			if(!$ev->isCancelled()){
-				if((!$player->isSneaking() || $item->isNull()) && $blockClicked->onInteract($item, $face, $clickVector, $player)){
-					return true;
+
+				if((!$player->isSneaking() or $item->isNull()) and $blockClicked->onInteract($item, $face, $clickVector, $player)){
+					return ItemUseResult::SUCCESS();
+
 				}
 
 				$result = $item->onInteractBlock($player, $blockReplace, $blockClicked, $face, $clickVector);
 				if(!$result->equals(ItemUseResult::NONE())){
-					return $result->equals(ItemUseResult::SUCCESS());
+					return $result;
 				}
 			}else{
-				return false;
+				return ItemUseResult::FAIL();
 			}
 		}elseif($blockClicked->onInteract($item, $face, $clickVector, $player)){
-			return true;
+			return ItemUseResult::SUCCESS();
 		}
 
-		if($item->isNull() || !$item->canBePlaced()){
-			return false;
+
+		if($item->isNull() or !$item->canBePlaced()){
+			return ItemUseResult::FAIL();
+
 		}
 		$hand = $item->getBlock($face);
 		$hand->position($this, $blockReplace->getPosition()->x, $blockReplace->getPosition()->y, $blockReplace->getPosition()->z);
@@ -1924,19 +1930,19 @@ class World implements ChunkManager{
 			$blockReplace = $blockClicked;
 			$hand->position($this, $blockReplace->getPosition()->x, $blockReplace->getPosition()->y, $blockReplace->getPosition()->z);
 		}elseif(!$hand->canBePlacedAt($blockReplace, $clickVector, $face, false)){
-			return false;
+			return ItemUseResult::FAIL();
 		}
 
 		$tx = new BlockTransaction($this);
 		if(!$hand->place($tx, $item, $blockReplace, $blockClicked, $face, $clickVector, $player)){
-			return false;
+			return ItemUseResult::FAIL();
 		}
 
 		foreach($tx->getBlocks() as [$x, $y, $z, $block]){
 			$block->position($this, $x, $y, $z);
 			foreach($block->getCollisionBoxes() as $collisionBox){
 				if(count($this->getCollidingEntities($collisionBox)) > 0){
-					return false;  //Entity in block
+					return ItemUseResult::NONE();  //Entity in block
 				}
 			}
 		}
@@ -1965,12 +1971,12 @@ class World implements ChunkManager{
 
 			$ev->call();
 			if($ev->isCancelled()){
-				return false;
+				return ItemUseResult::FAIL();
 			}
 		}
 
 		if(!$tx->apply()){
-			return false;
+			return ItemUseResult::FAIL();
 		}
 		foreach($tx->getBlocks() as [$x, $y, $z, $_]){
 			$tile = $this->getTileAt($x, $y, $z);
@@ -1988,7 +1994,7 @@ class World implements ChunkManager{
 
 		$item->pop();
 
-		return true;
+		return ItemUseResult::SUCCESS();
 	}
 
 	public function getEntity(int $entityId) : ?Entity{
